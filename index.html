@@ -52,8 +52,30 @@ p{line-height:1.55}
 .progress>div{height:100%;background:var(--green);width:0;transition:width .2s}
 .activity-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .activity-number{color:var(--primary);font-weight:850}
-.canvas-wrap{background:#fff;border:2px solid var(--line);border-radius:16px;overflow:hidden;touch-action:none}
+
+/* Lienzo y animación de Trazo */
+.canvas-wrap{
+ background:#fff;border:2px solid var(--line);border-radius:16px;
+ overflow:hidden;touch-action:none;position:relative;
+}
 canvas{display:block;width:100%;height:auto;aspect-ratio:4/3;touch-action:none;cursor:crosshair}
+#demoCanvas{
+ position:absolute;inset:0;width:100%;height:100%;
+ pointer-events:none;z-index:2;aspect-ratio:4/3;
+}
+.trazo-demo{
+ position:absolute;z-index:3;pointer-events:none;
+ font-size:34px;line-height:1;
+ transform:translate(-25%,-85%);
+ filter:drop-shadow(0 2px 2px #0003);
+ will-change:left,top;
+}
+.trazo-demo.idle{animation:trazoIdle .8s ease-in-out infinite alternate}
+@keyframes trazoIdle{
+ from{margin-top:-2px;transform:translate(-25%,-85%) rotate(-5deg)}
+ to{margin-top:3px;transform:translate(-25%,-85%) rotate(5deg)}
+}
+
 .tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0}
 .tool{background:#f1f1f7;padding:9px 11px;border-radius:10px;display:flex;align-items:center;gap:7px;font-size:13px}
 .tool input[type=range]{width:90px}
@@ -75,6 +97,7 @@ hr{border:0;border-top:1px solid var(--line);margin:18px 0}
  .hero{padding:19px;gap:12px}.mascot{width:65px;height:65px;font-size:40px}
  h1{font-size:25px}.bottomnav{justify-content:space-around}
  .bottomnav button{padding:9px 10px;font-size:12px}
+ .trazo-demo{font-size:29px}
 }
 </style>
 </head>
@@ -86,16 +109,13 @@ hr{border:0;border-top:1px solid var(--line);margin:18px 0}
     <div class="stat">🔥 <span id="streak">0</span></div>
   </div>
 </header>
-
 <main id="app"></main>
-
 <nav class="bottomnav hidden" id="nav">
   <button data-page="home" class="active">⌂ Inicio</button>
   <button data-page="route">▤ Recorrido</button>
   <button data-page="profile">◉ Perfil</button>
   <button data-page="settings">⚙ Ajustes</button>
 </nav>
-
 <input type="file" id="imageUpload" accept="image/*" class="hidden">
 
 <script>
@@ -168,14 +188,181 @@ const activities = [
  ]
 ];
 
+/* 35 demostraciones: una para cada actividad.
+   Cada camino es una secuencia de puntos normalizados entre 0 y 1. */
 const demos = {
- lines:[["line",.18,.28,.78,.28],["line",.18,.50,.78,.50],["line",.18,.72,.78,.72]],
- directions:[["line",.2,.3,.8,.3],["line",.5,.15,.5,.85],["line",.2,.8,.8,.2]],
- horizontal:[["line",.15,.3,.85,.3],["line",.15,.5,.85,.5],["line",.15,.7,.85,.7]],
- curves:[["curve",.15,.5,.35,.15,.65,.85,.85,.5],["line",.15,.8,.85,.8]],
- opacity:[["line",.15,.3,.85,.3],["line",.15,.5,.85,.5],["line",.15,.7,.85,.7]],
- points:[["line",.2,.3,.5,.2],["line",.5,.2,.75,.55]],
- combine:[["line",.2,.7,.5,.2],["line",.5,.2,.8,.7],["curve",.8,.7,.65,.85,.35,.85,.2,.7]]
+ lines:{separate:true,paths:[
+  [[.15,.28],[.85,.28]],[[.15,.50],[.85,.50]],[[.15,.72],[.85,.72]]
+ ]},
+ five:{separate:true,paths:[
+  [[.15,.24],[.38,.20]],[[.24,.39],[.52,.39]],
+  [[.15,.55],[.43,.62]],[[.55,.24],[.80,.33]],
+  [[.55,.63],[.84,.73]]
+ ]},
+ shapes:{paths:[
+  [[.18,.36],[.30,.18],[.42,.36],[.18,.36]],
+  [[.55,.20],[.79,.20],[.79,.45],[.55,.45],[.55,.20]],
+  [[.32,.78],[.49,.52],[.66,.78],[.32,.78]]
+ ]},
+ creative:{paths:[
+  [[.15,.62],[.15,.40],[.30,.40],[.30,.62],[.15,.62]],
+  [[.56,.30],[.68,.18],[.80,.30]],
+  [[.12,.80],[.35,.80],[.53,.68],[.78,.80]]
+ ]},
+ variety:{paths:[
+  [[.12,.25],[.42,.25]],[[.56,.25],[.85,.25]],
+  [[.12,.50],[.25,.38],[.38,.50],[.51,.38],[.64,.50]],
+  [[.30,.76],[.43,.62],[.56,.76],[.69,.62],[.82,.76]]
+ ]},
+ directions:{separate:true,paths:[
+  [[.15,.28],[.85,.28]],[[.50,.15],[.50,.85]],[[.18,.80],[.82,.20]]
+ ]},
+ horizontal:{separate:true,paths:[
+  [[.15,.30],[.85,.30]],[[.15,.50],[.85,.50]],[[.15,.70],[.85,.70]]
+ ]},
+ parallel:{paths:[
+  [[.15,.24],[.68,.24]],[[.15,.36],[.68,.36]],
+  [[.15,.48],[.68,.48]],[[.28,.75],[.56,.58]],
+  [[.45,.84],[.73,.67]]
+ ]},
+ house:{paths:[
+  [[.20,.48],[.50,.20],[.80,.48]],
+  [[.27,.46],[.27,.78],[.73,.78],[.73,.46]],
+  [[.44,.78],[.44,.59],[.56,.59],[.56,.78]],
+  [[.34,.54],[.42,.54],[.42,.63],[.34,.63],[.34,.54]],
+  [[.59,.54],[.67,.54],[.67,.63],[.59,.63],[.59,.54]]
+ ]},
+ allDirections:{paths:[
+  [[.14,.26],[.47,.26]],[[.30,.38],[.30,.78]],
+  [[.54,.72],[.83,.40]],[[.56,.20],[.83,.20]]
+ ]},
+ curves:{separate:true,paths:[
+  [[.12,.48],[.24,.22],[.40,.22],[.50,.48],[.62,.74],[.78,.74],[.88,.48]],
+  [[.15,.78],[.30,.68],[.45,.78],[.60,.68],[.85,.78]]
+ ]},
+ fiveCurves:{separate:true,paths:[
+  [[.12,.30],[.22,.16],[.34,.42],[.46,.30]],
+  [[.54,.30],[.66,.16],[.78,.42],[.88,.30]],
+  [[.15,.56],[.30,.40],[.45,.56]],
+  [[.55,.56],[.70,.40],[.85,.56]],
+  [[.25,.80],[.38,.64],[.51,.80],[.64,.64],[.77,.80]]
+ ]},
+ curveTypes:{paths:[
+  [[.12,.30],[.22,.16],[.32,.40],[.42,.30],[.52,.40],[.62,.30]],
+  [[.16,.70],[.30,.48],[.44,.70]],
+  [[.62,.72],[.70,.52],[.82,.58],[.84,.72],[.72,.80],[.62,.72]]
+ ]},
+ ocean:{paths:[
+  [[.10,.34],[.22,.25],[.34,.34],[.46,.25],[.58,.34],[.70,.25],[.82,.34]],
+  [[.10,.52],[.22,.43],[.34,.52],[.46,.43],[.58,.52],[.70,.43],[.82,.52]],
+  [[.10,.70],[.22,.61],[.34,.70],[.46,.61],[.58,.70],[.70,.61],[.82,.70]],
+  [[.72,.18],[.72,.10],[.80,.10],[.80,.18],[.72,.18]]
+ ]},
+ curveVariety:{paths:[
+  [[.12,.30],[.24,.18],[.36,.30],[.48,.18],[.60,.30]],
+  [[.18,.66],[.32,.46],[.46,.66]],
+  [[.64,.72],[.72,.54],[.82,.58],[.84,.70],[.72,.78],[.64,.72]]
+ ]},
+ opacity:{separate:true,paths:[
+  [[.15,.30],[.85,.30]],[[.15,.50],[.85,.50]],[[.15,.70],[.85,.70]]
+ ]},
+ intensity:{separate:true,paths:[
+  [[.15,.30],[.85,.30]],[[.15,.50],[.85,.50]],[[.15,.70],[.85,.70]]
+ ]},
+ fiveLevels:{separate:true,paths:[
+  [[.12,.20],[.88,.20]],[[.12,.35],[.88,.35]],
+  [[.12,.50],[.88,.50]],[[.12,.65],[.88,.65]],
+  [[.12,.80],[.88,.80]]
+ ]},
+ sphere:{paths:[
+  [[.50,.18],[.64,.21],[.75,.31],[.81,.45],[.79,.61],[.70,.74],[.50,.81],[.31,.74],[.21,.61],[.19,.45],[.25,.31],[.36,.21],[.50,.18]],
+  [[.30,.58],[.38,.45],[.50,.40]],
+  [[.34,.68],[.48,.60],[.62,.58]],
+  [[.48,.75],[.62,.70]]
+ ]},
+ shading:{paths:[
+  [[.28,.68],[.28,.42],[.48,.30],[.68,.42],[.68,.68],[.48,.78],[.28,.68]],
+  [[.38,.42],[.48,.36],[.58,.42]],
+  [[.34,.58],[.48,.52],[.62,.58]],
+  [[.40,.70],[.50,.66],[.60,.70]]
+ ]},
+ points:{paths:[
+  [[.18,.28],[.48,.18],[.78,.34],[.65,.72],[.30,.78],[.18,.28]]
+ ]},
+ path:{paths:[
+  [[.12,.72],[.24,.55],[.38,.60],[.48,.36],[.62,.42],[.78,.18]]
+ ]},
+ circles:{separate:true,paths:[
+  [[.30,.42],[.34,.30],[.46,.25],[.58,.31],[.63,.44],[.56,.57],[.43,.60],[.31,.54],[.30,.42]],
+  [[.62,.40],[.67,.28],[.79,.26],[.86,.37],[.84,.50],[.72,.56],[.62,.48],[.62,.40]],
+  [[.37,.72],[.42,.62],[.52,.60],[.62,.68],[.60,.80],[.48,.84],[.38,.78],[.37,.72]]
+ ]},
+ guided:{paths:[
+  [[.50,.17],[.50,.80]],[[.20,.48],[.80,.48]],
+  [[.30,.34],[.70,.34],[.70,.66],[.30,.66],[.30,.34]],
+  [[.30,.34],[.50,.20],[.70,.34]]
+ ]},
+ route:{paths:[
+  [[.12,.72],[.28,.72],[.40,.55],[.55,.55],[.68,.34],[.86,.34]],
+  [[.28,.72],[.28,.48],[.42,.38],[.55,.48]],
+  [[.55,.55],[.68,.70],[.84,.70]]
+ ]},
+ combine:{paths:[
+  [[.18,.70],[.50,.20],[.82,.70]],
+  [[.18,.70],[.82,.70]],
+  [[.18,.70],[.32,.83],[.68,.83],[.82,.70]]
+ ]},
+ threeCombined:{paths:[
+  [[.14,.32],[.27,.18],[.40,.32],[.27,.46],[.14,.32]],
+  [[.52,.20],[.78,.20],[.78,.44],[.52,.44],[.52,.20]],
+  [[.48,.76],[.62,.54],[.78,.76],[.48,.76]]
+ ]},
+ objects:{paths:[
+  [[.18,.38],[.27,.27],[.36,.38],[.36,.58],[.18,.58],[.18,.38]],
+  [[.48,.30],[.72,.30],[.72,.62],[.48,.62],[.48,.30]],
+  [[.68,.76],[.76,.64],[.84,.76],[.84,.84],[.68,.84],[.68,.76]]
+ ]},
+ rocket:{paths:[
+  [[.50,.15],[.68,.42],[.68,.70],[.32,.70],[.32,.42],[.50,.15]],
+  [[.32,.56],[.20,.76],[.32,.68]],
+  [[.68,.56],[.80,.76],[.68,.68]],
+  [[.43,.70],[.50,.86],[.57,.70]],
+  [[.43,.43],[.50,.35],[.57,.43],[.50,.51],[.43,.43]]
+ ]},
+ freeCombined:{paths:[
+  [[.16,.68],[.30,.48],[.42,.68],[.54,.48],[.66,.68]],
+  [[.28,.30],[.48,.18],[.68,.30]],
+  [[.28,.30],[.28,.48],[.68,.48],[.68,.30]]
+ ]},
+ review:{separate:true,paths:[
+  [[.12,.25],[.40,.25]],
+  [[.48,.25],[.58,.16],[.68,.34],[.78,.25]],
+  [[.18,.62],[.24,.50],[.36,.50],[.42,.62],[.36,.74],[.24,.74],[.18,.62]],
+  [[.58,.72],[.68,.52],[.80,.72],[.58,.72]]
+ ]},
+ warmup:{separate:true,paths:[
+  [[.12,.25],[.42,.25]],
+  [[.52,.25],[.62,.16],[.72,.34],[.82,.25]],
+  [[.20,.62],[.28,.50],[.40,.62],[.28,.74],[.20,.62]],
+  [[.58,.55],[.78,.55],[.78,.76],[.58,.76],[.58,.55]]
+ ]},
+ freeTest:{paths:[
+  [[.15,.30],[.35,.30],[.35,.48],[.15,.48],[.15,.30]],
+  [[.52,.28],[.62,.18],[.72,.38],[.82,.28]],
+  [[.18,.72],[.32,.62],[.46,.72],[.60,.62],[.74,.72]]
+ ]},
+ finalCreate:{paths:[
+  [[.18,.70],[.18,.48],[.34,.32],[.50,.48],[.50,.70],[.18,.70]],
+  [[.62,.32],[.70,.20],[.78,.32]],
+  [[.62,.32],[.62,.52],[.78,.52],[.78,.32]],
+  [[.12,.82],[.88,.82]]
+ ]},
+ finalWork:{paths:[
+  [[.18,.72],[.18,.42],[.50,.20],[.82,.42],[.82,.72]],
+  [[.28,.72],[.28,.48],[.72,.48],[.72,.72]],
+  [[.40,.72],[.40,.58],[.60,.58],[.60,.72]],
+  [[.12,.82],[.88,.82]]
+ ]}
 };
 
 let data = loadData();
@@ -188,9 +375,12 @@ let redoStack = [];
 let currentStroke = null;
 let canvas = null;
 let ctx = null;
+let demoCanvas = null;
+let demoCtx = null;
 let uploadedImage = null;
-let demoTimer = null;
+let demoFrame = null;
 let demoPlaying = false;
+let demoIdle = false;
 let lastCheck = null;
 
 function loadData(){
@@ -359,7 +549,7 @@ function renderSettings(){
   <div class="setting-row"><div><b>Cerrar sesión</b><div class="muted small">Sal de tu perfil en este navegador.</div></div><button class="btn secondary" id="logout">Cerrar sesión</button></div>
   <div class="setting-row"><div><b>Eliminar cuenta</b><div class="muted small">Elimina tu perfil local y todos sus datos de DRAWO en este navegador.</div></div><button class="btn danger" id="deleteAccount">Eliminar</button></div>
   <hr>
-  <p class="muted small">DRAWO Beta 3.0 · Versión local de prueba. No hay sincronización en la nube.</p>
+  <p class="muted small">DRAWO Beta 4.0 · Versión local de prueba. No hay sincronización en la nube.</p>
  </section>`;
  document.getElementById("resetProgress").onclick=()=>{
   if(!confirm("¿Seguro que quieres reiniciar todas tus lecciones y tu experiencia? Tu nombre de perfil se conservará."))return;
@@ -378,7 +568,6 @@ function renderSettings(){
   nav.classList.add("hidden");showWelcome();
  };
 }
-
 function startLesson(i){
  if(i>0&&!data.completed.includes(i-1)&&!data.completed.includes(i)){
   alert("Primero tienes que completar la lección anterior.");return;
@@ -417,7 +606,11 @@ function renderActivity(){
    <button class="btn ghost" id="clear">Limpiar</button>
    <button class="btn ghost" id="upload">Subir dibujo</button>
   </div>
-  <div class="canvas-wrap"><canvas id="drawingCanvas" width="900" height="675"></canvas></div>
+  <div class="canvas-wrap">
+   <canvas id="drawingCanvas" width="900" height="675"></canvas>
+   <canvas id="demoCanvas" width="900" height="675"></canvas>
+   <div id="trazoDemo" class="trazo-demo hidden" aria-hidden="true">✏️</div>
+  </div>
   <div class="btnrow">
    <button class="btn secondary" id="demo">▶ Repetir demostración</button>
    <button class="btn" id="check">Comprobar actividad</button>
@@ -429,24 +622,35 @@ function renderActivity(){
  </div>`;
  document.getElementById("activityExtra").innerHTML=activityExtra(a[3]);
  initCanvas();
+
  document.getElementById("demo").onclick=playDemo;
  document.getElementById("check").onclick=checkActivity;
  document.getElementById("backLesson").onclick=()=>showPage("route");
- document.getElementById("upload").onclick=()=>document.getElementById("imageUpload").click();
+ document.getElementById("upload").onclick=()=>{
+  stopDemo();
+  document.getElementById("imageUpload").click();
+ };
  document.getElementById("eraser").onclick=()=>{
+  stopDemo();
   const c=document.getElementById("color");
   if(c.value==="#ffffff"){c.value="#242638";document.getElementById("eraser").textContent="⌫ Borrador";}
   else{c.value="#ffffff";document.getElementById("eraser").textContent="✏️ Lápiz";}
  };
  document.getElementById("clear").onclick=()=>{
+  stopDemo();
   if(confirm("¿Limpiar el lienzo?")){strokes=[];redoStack=[];uploadedImage=null;redraw()}
  };
  document.getElementById("undo").onclick=()=>{
+  stopDemo();
   if(strokes.length){redoStack.push(strokes.pop());redraw()}
  };
  document.getElementById("redo").onclick=()=>{
+  stopDemo();
   if(redoStack.length){strokes.push(redoStack.pop());redraw()}
  };
+
+ // La demostración empieza automáticamente al entrar en la actividad.
+ playDemo();
 }
 function activityExtra(type){
  const examples={
@@ -461,35 +665,62 @@ function activityExtra(type){
  };
  return examples[type]||"";
 }
+
+/* CONFIGURACIÓN DEL LIENZO */
 function initCanvas(){
  canvas=document.getElementById("drawingCanvas");
  ctx=canvas.getContext("2d");
+ demoCanvas=document.getElementById("demoCanvas");
+ demoCtx=demoCanvas.getContext("2d");
  redraw();
+ clearDemoCanvas();
+
  const getPos=e=>{
   const r=canvas.getBoundingClientRect();
-  return {x:(e.clientX-r.left)/r.width*canvas.width,y:(e.clientY-r.top)/r.height*canvas.height};
+  return {
+   x:(e.clientX-r.left)/r.width*canvas.width,
+   y:(e.clientY-r.top)/r.height*canvas.height
+  };
  };
+
  canvas.onpointerdown=e=>{
-  stopDemo();drawing=true;canvas.setPointerCapture(e.pointerId);
+  // El primer toque entrega el lienzo al estudiante inmediatamente.
+  stopDemo();
+  drawing=true;
+  canvas.setPointerCapture(e.pointerId);
   const p=getPos(e);
-  currentStroke={points:[p],color:document.getElementById("color").value,
+  currentStroke={
+   points:[p],
+   color:document.getElementById("color").value,
    size:Number(document.getElementById("size").value),
-   opacity:Number(document.getElementById("opacity").value)/100};
-  redoStack=[];strokes.push(currentStroke);redraw();
+   opacity:Number(document.getElementById("opacity").value)/100
+  };
+  redoStack=[];
+  strokes.push(currentStroke);
+  redraw();
  };
  canvas.onpointermove=e=>{
   if(!drawing||!currentStroke)return;
-  currentStroke.points.push(getPos(e));redraw();
+  currentStroke.points.push(getPos(e));
+  redraw();
  };
  const end=()=>{drawing=false;currentStroke=null};
- canvas.onpointerup=end;canvas.onpointercancel=end;
- document.getElementById("size").oninput=e=>document.getElementById("sizeValue").textContent=e.target.value;
- document.getElementById("opacity").oninput=e=>document.getElementById("opacityValue").textContent=e.target.value+"%";
+ canvas.onpointerup=end;
+ canvas.onpointercancel=end;
+
+ document.getElementById("size").oninput=e=>{
+  document.getElementById("sizeValue").textContent=e.target.value;
+ };
+ document.getElementById("opacity").oninput=e=>{
+  document.getElementById("opacityValue").textContent=e.target.value+"%";
+ };
 }
+
 function redraw(){
  if(!canvas||!ctx)return;
  ctx.clearRect(0,0,canvas.width,canvas.height);
- ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.fillStyle="#ffffff";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
  if(uploadedImage){
   try{ctx.drawImage(uploadedImage,0,0,canvas.width,canvas.height)}catch(e){}
  }
@@ -497,82 +728,228 @@ function redraw(){
 }
 function drawStroke(s){
  if(!s.points||!s.points.length)return;
- ctx.save();ctx.globalAlpha=s.opacity??1;ctx.strokeStyle=s.color||"#222";
- ctx.fillStyle=s.color||"#222";ctx.lineWidth=s.size||5;ctx.lineCap="round";ctx.lineJoin="round";
+ ctx.save();
+ ctx.globalAlpha=s.opacity??1;
+ ctx.strokeStyle=s.color||"#222";
+ ctx.fillStyle=s.color||"#222";
+ ctx.lineWidth=s.size||5;
+ ctx.lineCap="round";
+ ctx.lineJoin="round";
  if(s.points.length===1){
-  ctx.beginPath();ctx.arc(s.points[0].x,s.points[0].y,(s.size||5)/2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();
+  ctx.arc(s.points[0].x,s.points[0].y,(s.size||5)/2,0,Math.PI*2);
+  ctx.fill();
  }else{
-  ctx.beginPath();ctx.moveTo(s.points[0].x,s.points[0].y);
+  ctx.beginPath();
+  ctx.moveTo(s.points[0].x,s.points[0].y);
   for(let i=1;i<s.points.length;i++)ctx.lineTo(s.points[i].x,s.points[i].y);
   ctx.stroke();
  }
  ctx.restore();
 }
+
+/* CARGA DE DIBUJOS EXTERNOS */
 document.getElementById("imageUpload").addEventListener("change",e=>{
- const file=e.target.files[0];if(!file)return;
- if(!file.type.startsWith("image/")){alert("Selecciona un archivo de imagen.");return}
+ const file=e.target.files[0];
+ if(!file)return;
+ if(!file.type.startsWith("image/")){
+  alert("Selecciona un archivo de imagen.");
+  return;
+ }
  const reader=new FileReader();
  reader.onload=()=>{
   const img=new Image();
-  img.onload=()=>{uploadedImage=img;redraw();alert("Dibujo cargado en el lienzo. Puedes usarlo como referencia o entregarlo en esta actividad.")};
+  img.onload=()=>{
+   uploadedImage=img;
+   redraw();
+   alert("Dibujo cargado en el lienzo. Puedes usarlo como referencia o entregarlo en esta actividad.");
+  };
   img.src=reader.result;
  };
- reader.readAsDataURL(file);e.target.value="";
+ reader.readAsDataURL(file);
+ e.target.value="";
 });
 
+/* SISTEMA DE ANIMACIÓN DE TRAZO */
+function clearDemoCanvas(){
+ if(!demoCanvas||!demoCtx)return;
+ demoCtx.clearRect(0,0,demoCanvas.width,demoCanvas.height);
+}
+function hideTrazo(){
+ const el=document.getElementById("trazoDemo");
+ if(el){
+  el.classList.add("hidden");
+  el.classList.remove("idle");
+ }
+ demoIdle=false;
+}
+function moveTrazo(x,y,idle=false){
+ const el=document.getElementById("trazoDemo");
+ if(!el||!demoCanvas)return;
+ const wrap=demoCanvas.parentElement.getBoundingClientRect();
+ const rect=demoCanvas.getBoundingClientRect();
+
+ el.classList.remove("hidden");
+ el.classList.toggle("idle",idle);
+ el.style.left=((rect.left-wrap.left)+(x/demoCanvas.width)*rect.width)+"px";
+ el.style.top=((rect.top-wrap.top)+(y/demoCanvas.height)*rect.height)+"px";
+ demoIdle=idle;
+}
 function stopDemo(){
- if(demoTimer){clearInterval(demoTimer);demoTimer=null}
+ if(demoFrame!==null){
+  cancelAnimationFrame(demoFrame);
+  demoFrame=null;
+ }
  demoPlaying=false;
+ clearDemoCanvas();
+ hideTrazo();
+}
+
+function getPointAt(path,t){
+ if(path.length===1)return {x:path[0][0],y:path[0][1]};
+ const lengths=[];
+ let total=0;
+ for(let i=1;i<path.length;i++){
+  const dx=path[i][0]-path[i-1][0];
+  const dy=path[i][1]-path[i-1][1];
+  const len=Math.hypot(dx,dy);
+  lengths.push(len);
+  total+=len;
+ }
+ let target=total*Math.max(0,Math.min(1,t));
+ for(let i=0;i<lengths.length;i++){
+  if(target<=lengths[i]||i===lengths.length-1){
+   const part=lengths[i]===0?1:target/lengths[i];
+   return {
+    x:path[i][0]+(path[i+1][0]-path[i][0])*part,
+    y:path[i][1]+(path[i+1][1]-path[i][1])*part
+   };
+  }
+  target-=lengths[i];
+ }
+ return {x:path[path.length-1][0],y:path[path.length-1][1]};
+}
+function getPartialPath(path,t){
+ const points=[path[0]];
+ if(t<=0)return points;
+ const lengths=[];
+ let total=0;
+ for(let i=1;i<path.length;i++){
+  const len=Math.hypot(path[i][0]-path[i-1][0],path[i][1]-path[i-1][1]);
+  lengths.push(len);
+  total+=len;
+ }
+ let remaining=total*t;
+ for(let i=0;i<lengths.length;i++){
+  const a=path[i],b=path[i+1],len=lengths[i];
+  if(remaining>=len){
+   points.push(b);
+   remaining-=len;
+  }else{
+   const q=len===0?1:remaining/len;
+   points.push([a[0]+(b[0]-a[0])*q,a[1]+(b[1]-a[1])*q]);
+   break;
+  }
+ }
+ return points;
+}
+function drawDemoPath(path,t=1){
+ const points=getPartialPath(path,t);
+ if(!points.length)return;
+ demoCtx.beginPath();
+ demoCtx.moveTo(points[0][0]*demoCanvas.width,points[0][1]*demoCanvas.height);
+ for(let i=1;i<points.length;i++){
+  demoCtx.lineTo(points[i][0]*demoCanvas.width,points[i][1]*demoCanvas.height);
+ }
+ demoCtx.stroke();
+}
+function renderDemo(completed,currentPath,currentT){
+ clearDemoCanvas();
+ demoCtx.save();
+ demoCtx.strokeStyle="#7057df";
+ demoCtx.lineWidth=7;
+ demoCtx.lineCap="round";
+ demoCtx.lineJoin="round";
+ for(const p of completed)drawDemoPath(p,1);
+ if(currentPath)drawDemoPath(currentPath,currentT);
+ demoCtx.restore();
 }
 function playDemo(){
  stopDemo();
+
  const type=activities[currentLesson][currentActivity][3];
  const demo=demos[type];
- if(!demo){
-  const f=document.getElementById("feedback");
-  f.innerHTML='<div class="check-result">Esta actividad no tiene una animación guiada específica todavía. ¡Puedes practicar libremente!</div>';
+ const feedback=document.getElementById("feedback");
+
+ if(!demo||!demo.paths||!demo.paths.length){
+  if(feedback){
+   feedback.innerHTML='<div class="check-result">Esta actividad no tiene una demostración disponible todavía.</div>';
+  }
   return;
  }
- strokes=[];redoStack=[];uploadedImage=null;redraw();
+
+ clearDemoCanvas();
+ hideTrazo();
  demoPlaying=true;
+
  let index=0;
- const drawNext=()=>{
-  if(index>=demo.length){
-   stopDemo();
-   setTimeout(()=>{strokes=[];redraw()},850);
-   return;
-  }
-  const d=demo[index];
-  const s={points:[],color:"#7057df",size:7,opacity:1};
-  strokes.push(s);
-  const x1=d[1]*canvas.width,y1=d[2]*canvas.height;
-  const x2=d[d[0]==="curve"?7:3]*canvas.width;
-  const y2=d[d[0]==="curve"?8:4]*canvas.height;
-  const steps=35;
-  let k=0;
-  const timer=setInterval(()=>{
-   k++;
-   const t=k/steps;
-   let x,y;
-   if(d[0]==="curve"){
-    const c1x=d[3]*canvas.width,c1y=d[4]*canvas.height;
-    const c2x=d[5]*canvas.width,c2y=d[6]*canvas.height;
-    const mt=1-t;
-    x=mt*mt*mt*x1+3*mt*mt*t*c1x+3*mt*t*t*c2x+t*t*t*x2;
-    y=mt*mt*mt*y1+3*mt*mt*t*c1y+3*mt*t*t*c2y+t*t*t*y2;
-   }else{x=x1+(x2-x1)*t;y=y1+(y2-y1)*t}
-   s.points.push({x,y});redraw();
-   if(k>=steps){
-    clearInterval(timer);
-    setTimeout(()=>{
-     strokes.pop();redraw();index++;setTimeout(drawNext,250);
-    },350);
+ let phase="drawing";
+ let phaseStart=performance.now();
+ let pauseStart=0;
+ const completed=[];
+ let currentT=0;
+ const duration=650;
+ const pauseDuration=420;
+ let currentPath=demo.paths[0];
+
+ function finishDemo(){
+  demoPlaying=false;
+  demoFrame=null;
+  clearDemoCanvas();
+  // Trazo queda esperando mientras el estudiante prepara su dibujo.
+  moveTrazo(demoCanvas.width*.88,demoCanvas.height*.91,true);
+ }
+
+ function frame(now){
+  if(!demoPlaying)return;
+
+  if(phase==="drawing"){
+   currentT=Math.min(1,(now-phaseStart)/duration);
+   renderDemo(completed,currentPath,currentT);
+
+   const point=getPointAt(currentPath,currentT);
+   moveTrazo(point.x*demoCanvas.width,point.y*demoCanvas.height);
+
+   if(currentT>=1){
+    completed.push(currentPath);
+    phase="pause";
+    pauseStart=now;
    }
-  },18);
- };
- drawNext();
+  }else if(phase==="pause"){
+   renderDemo(completed,null,0);
+   const last=currentPath[currentPath.length-1];
+   moveTrazo(last[0]*demoCanvas.width,last[1]*demoCanvas.height);
+
+   if(now-pauseStart>=pauseDuration){
+    if(demo.separate)completed.length=0;
+    index++;
+    if(index>=demo.paths.length){
+     finishDemo();
+     return;
+    }
+    currentPath=demo.paths[index];
+    phase="drawing";
+    phaseStart=now;
+    currentT=0;
+   }
+  }
+
+  demoFrame=requestAnimationFrame(frame);
+ }
+ demoFrame=requestAnimationFrame(frame);
 }
 
+/* COMPROBACIÓN DE ACTIVIDADES */
 function getMetrics(){
  const all=strokes.filter(s=>s.points&&s.points.length);
  const lineStats=all.map(s=>{
@@ -583,12 +960,19 @@ function getMetrics(){
   let path=0;
   for(let i=1;i<p.length;i++)path+=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);
   const direct=length||1;
-  return {dx,dy,length,path,ratio:path/direct,points:p.length,opacity:s.opacity??1};
+  return {
+   dx,dy,length,path,ratio:path/direct,
+   points:p.length,opacity:s.opacity??1
+  };
  });
  const total=all.length;
  const horizontal=lineStats.filter(s=>Math.abs(s.dy)<Math.abs(s.dx)*.35).length;
  const vertical=lineStats.filter(s=>Math.abs(s.dx)<Math.abs(s.dy)*.35).length;
- const diagonal=lineStats.filter(s=>Math.abs(s.dx)>20&&Math.abs(s.dy)>20&&Math.abs(Math.abs(s.dx)-Math.abs(s.dy))<Math.max(Math.abs(s.dx),Math.abs(s.dy))*.8).length;
+ const diagonal=lineStats.filter(s=>
+  Math.abs(s.dx)>20&&Math.abs(s.dy)>20&&
+  Math.abs(Math.abs(s.dx)-Math.abs(s.dy))<
+  Math.max(Math.abs(s.dx),Math.abs(s.dy))*.8
+ ).length;
  const curved=lineStats.filter(s=>s.ratio>1.18&&s.points>5).length;
  const opacities=lineStats.map(s=>s.opacity);
  return {total,horizontal,vertical,diagonal,curved,opacities,lineStats};
@@ -598,42 +982,121 @@ function checkActivity(){
  const type=activities[currentLesson][currentActivity][3];
  const m=getMetrics();
  let pass=false,msg="";
- const requireStrokes=(n)=>m.total>=n;
+ const requireStrokes=n=>m.total>=n;
+
  switch(type){
-  case "five":case "fiveCurves":pass=requireStrokes(5);msg="Intenta realizar al menos cinco trazos.";break;
-  case "shapes":pass=requireStrokes(3);msg="Prueba a dibujar varias formas diferentes.";break;
-  case "variety":case "allDirections":
-   pass=m.total>=3&&(m.horizontal>0||type==="variety")&&(m.curved>0||type==="variety")&&(m.vertical>0||m.diagonal>0||type==="variety");
-   msg="Necesitas combinar distintos tipos de trazos y direcciones.";break;
-  case "horizontal":pass=m.horizontal>=2;msg="Intenta dibujar al menos tres líneas horizontales.";break;
-  case "parallel":pass=m.total>=6&&(m.horizontal+m.diagonal)>=4;msg="Dibuja varias líneas con direcciones parecidas y algunas diagonales.";break;
-  case "house":pass=m.total>=6;msg="Construye la casa con varios trazos: paredes, techo y detalles.";break;
-  case "curveTypes":pass=m.curved>=3&&m.total>=5;msg="Prueba a crear varias curvas, ondas o espirales.";break;
-  case "ocean":case "curveVariety":pass=m.curved>=3;msg="Incluye más líneas curvas en tu composición.";break;
-  case "intensity":case "fiveLevels":pass=m.total>=3&&new Set(opacities.map(v=>Math.round(v*10))).size>=2;msg="Cambia la opacidad entre tus trazos para crear intensidades distintas.";break;
-  case "sphere":case "shading":pass=m.total>=5&&new Set(opacities.map(v=>Math.round(v*10))).size>=2;msg="Prueba con más trazos y diferentes niveles de opacidad.";break;
-  case "circles":pass=m.total>=3;msg="Intenta dibujar tres círculos o formas redondeadas.";break;
-  case "path":case "route":pass=m.total>=1&&m.lineStats.some(s=>s.path>180);msg="Intenta realizar un recorrido más largo y continuo.";break;
-  case "threeCombined":case "objects":case "rocket":pass=m.total>=5;msg="Combina más trazos para construir tus formas u objetos.";break;
-  case "warmup":pass=m.total>=4;msg="Realiza los cuatro trazos del calentamiento.";break;
-  case "finalCreate":case "finalWork":case "freeTest":case "freeCombined":case "creative":case "guided":
-   pass=m.total>=5;msg="Tu dibujo necesita más trazos para mostrar lo que has practicado.";break;
-  default:pass=m.total>=2;msg="Prueba a añadir algunos trazos más.";
+  case "five":
+  case "fiveCurves":
+   pass=requireStrokes(5);
+   msg="Intenta realizar al menos cinco trazos.";
+   break;
+  case "shapes":
+   pass=requireStrokes(3);
+   msg="Prueba a dibujar varias formas diferentes.";
+   break;
+  case "variety":
+  case "allDirections":
+   pass=m.total>=3&&(m.horizontal>0||type==="variety")&&
+    (m.curved>0||type==="variety")&&
+    (m.vertical>0||m.diagonal>0||type==="variety");
+   msg="Necesitas combinar distintos tipos de trazos y direcciones.";
+   break;
+  case "horizontal":
+   pass=m.horizontal>=2;
+   msg="Intenta dibujar al menos tres líneas horizontales.";
+   break;
+  case "parallel":
+   pass=m.total>=6&&(m.horizontal+m.diagonal)>=4;
+   msg="Dibuja varias líneas con direcciones parecidas y algunas diagonales.";
+   break;
+  case "house":
+   pass=m.total>=6;
+   msg="Construye la casa con varios trazos: paredes, techo y detalles.";
+   break;
+  case "curveTypes":
+   pass=m.curved>=3&&m.total>=5;
+   msg="Prueba a crear varias curvas, ondas o espirales.";
+   break;
+  case "ocean":
+  case "curveVariety":
+   pass=m.curved>=3;
+   msg="Incluye más líneas curvas en tu composición.";
+   break;
+  case "intensity":
+  case "fiveLevels":
+   pass=m.total>=3&&new Set(opacities.map(v=>Math.round(v*10))).size>=2;
+   msg="Cambia la opacidad entre tus trazos para crear intensidades distintas.";
+   break;
+  case "sphere":
+  case "shading":
+   pass=m.total>=5&&new Set(opacities.map(v=>Math.round(v*10))).size>=2;
+   msg="Prueba con más trazos y diferentes niveles de opacidad.";
+   break;
+  case "circles":
+   pass=m.total>=3;
+   msg="Intenta dibujar tres círculos o formas redondeadas.";
+   break;
+  case "path":
+  case "route":
+   pass=m.total>=1&&m.lineStats.some(s=>s.path>180);
+   msg="Intenta realizar un recorrido más largo y continuo.";
+   break;
+  case "threeCombined":
+  case "objects":
+  case "rocket":
+   pass=m.total>=5;
+   msg="Combina más trazos para construir tus formas u objetos.";
+   break;
+  case "warmup":
+   pass=m.total>=4;
+   msg="Realiza los cuatro trazos del calentamiento.";
+   break;
+  case "finalCreate":
+  case "finalWork":
+  case "freeTest":
+  case "freeCombined":
+  case "creative":
+  case "guided":
+   pass=m.total>=5;
+   msg="Tu dibujo necesita más trazos para mostrar lo que has practicado.";
+   break;
+  default:
+   pass=m.total>=2;
+   msg="Prueba a añadir algunos trazos más.";
  }
+
  const feedback=document.getElementById("feedback");
  if(pass){
-  feedback.innerHTML=`<div class="check-result good"><b>¡Muy bien!</b><br>Has cumplido el objetivo básico de esta actividad. Puedes continuar.</div><div class="btnrow"><button class="btn green" id="nextActivity">Continuar →</button></div>`;
+  feedback.innerHTML=`
+   <div class="check-result good">
+    <b>¡Muy bien!</b><br>
+    Has cumplido el objetivo básico de esta actividad. Puedes continuar.
+   </div>
+   <div class="btnrow">
+    <button class="btn green" id="nextActivity">Continuar →</button>
+   </div>`;
   document.getElementById("nextActivity").onclick=nextActivity;
  }else{
-  feedback.innerHTML=`<div class="check-result bad"><b>¡Casi lo tienes!</b><br>${msg}<br><span class="small muted">No necesitas un dibujo perfecto. Inténtalo otra vez.</span></div>`;
+  feedback.innerHTML=`
+   <div class="check-result bad">
+    <b>¡Casi lo tienes!</b><br>${msg}<br>
+    <span class="small muted">No necesitas un dibujo perfecto. Inténtalo otra vez.</span>
+   </div>`;
  }
 }
 function nextActivity(){
  if(currentActivity<4){
-  currentActivity++;strokes=[];redoStack=[];uploadedImage=null;renderActivity();
+  currentActivity++;
+  strokes=[];
+  redoStack=[];
+  uploadedImage=null;
+  renderActivity();
  }else{
   if(!data.completed.includes(currentLesson)){
-   data.completed.push(currentLesson);data.xp+=50;updateStreak();save();
+   data.completed.push(currentLesson);
+   data.xp+=50;
+   updateStreak();
+   save();
   }
   renderLessonComplete();
  }
@@ -666,7 +1129,8 @@ nav.addEventListener("click",e=>{
 });
 
 updateStats();
-if(data.profile)showPage("home");else showWelcome();
+if(data.profile)showPage("home");
+else showWelcome();
 
 })();
 </script>
