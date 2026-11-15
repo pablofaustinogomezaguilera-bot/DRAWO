@@ -156,7 +156,7 @@ const activities = [
  ],
  [
   ["Aprende","Precisión y coordinación","Seguir puntos y caminos ayuda a controlar mejor el movimiento de tu mano.","points"],
-  ["Practica","Conecta los puntos","Dibuja una línea que pase cerca de varios puntos imaginarios.","path"],
+  ["Practica","Conecta los puntos","Conecta los puntos que aparecen en pantalla en orden para completar el ejercicio.","path"],
   ["Experimenta","Círculos controlados","Intenta dibujar tres círculos de tamaño parecido.","circles"],
   ["Crea","Construye una figura","Usa puntos y líneas guía para construir una figura sencilla.","guided"],
   ["Finaliza","Un recorrido de trazos","Crea un dibujo que combine líneas rectas, curvas y cambios de dirección.","route"]
@@ -200,7 +200,7 @@ const demos = {
  sphere:{paths:[[[.50,.18],[.64,.21],[.75,.31],[.81,.45],[.79,.61],[.70,.74],[.50,.81],[.31,.74],[.21,.61],[.19,.45],[.25,.31],[.36,.21],[.50,.18]],[[.30,.58],[.38,.45],[.50,.40]],[[.34,.68],[.48,.60],[.62,.58]],[[.48,.75],[.62,.70]]]},
  shading:{paths:[[[.28,.68],[.28,.42],[.48,.30],[.68,.42],[.68,.68],[.48,.78],[.28,.68]],[[.38,.42],[.48,.36],[.58,.42]],[[.34,.58],[.48,.52],[.62,.58]],[[.40,.70],[.50,.66],[.60,.70]]]},
  points:{paths:[[[.18,.28],[.48,.18],[.78,.34],[.65,.72],[.30,.78],[.18,.28]]]},
- path:{paths:[[[.12,.72],[.24,.55],[.38,.60],[.48,.36],[.62,.42],[.78,.18]]]},
+ path:{paths:[[[.15,.70],[.30,.50],[.45,.60],[.60,.35],[.75,.50],[.85,.25]]]},
  circles:{separate:true,paths:[[[.30,.42],[.34,.30],[.46,.25],[.58,.31],[.63,.44],[.56,.57],[.43,.60],[.31,.54],[.30,.42]],[[.62,.40],[.67,.28],[.79,.26],[.86,.37],[.84,.50],[.72,.56],[.62,.48],[.62,.40]],[[.37,.72],[.42,.62],[.52,.60],[.62,.68],[.60,.80],[.48,.84],[.38,.78],[.37,.72]]]},
  guided:{paths:[[[.50,.17],[.50,.80]],[[.20,.48],[.80,.48]],[[.30,.34],[.70,.34],[.70,.66],[.30,.66],[.30,.34]],[[.30,.34],[.50,.20],[.70,.34]]]},
  route:{paths:[[[.12,.72],[.28,.72],[.40,.55],[.55,.55],[.68,.34],[.86,.34]],[[.28,.72],[.28,.48],[.42,.38],[.55,.48]],[[.55,.55],[.68,.70],[.84,.70]]]},
@@ -221,6 +221,7 @@ let page = "home";
 let currentLesson = 0;
 let currentActivity = 0;
 let drawing = false;
+let toolMode = "brush"; // "brush", "eraser", "bucket"
 let strokes = [];
 let redoStack = [];
 let currentStroke = null;
@@ -435,6 +436,7 @@ function renderActivityExplanation(){
 /* 2. PANTALLA DE LIENZO Y DEMOSTRACIÓN */
 function renderActivityCanvas(){
  stopDemo();
+ toolMode = "brush";
  const a=activities[currentLesson][currentActivity];
  const n=currentActivity+1;
  const pct=(currentActivity/5)*100;
@@ -454,7 +456,9 @@ function renderActivityCanvas(){
    <label class="tool">Color <input type="color" id="color" value="#242638"></label>
    <label class="tool">Tamaño <input type="range" id="size" min="1" max="30" value="5"><span id="sizeValue">5</span></label>
    <label class="tool">Opacidad <input type="range" id="opacity" min="10" max="100" value="100"><span id="opacityValue">100%</span></label>
+   <button class="btn ghost" id="brushBtn" style="background:#efedfc;color:var(--primary)">✏️ Pincel</button>
    <button class="btn ghost" id="eraser">⌫ Borrador</button>
+   <button class="btn ghost" id="bucketBtn">🪣 Relleno</button>
    <button class="btn ghost" id="undo">↶</button>
    <button class="btn ghost" id="redo">↷</button>
    <button class="btn ghost" id="clear">Limpiar</button>
@@ -482,12 +486,40 @@ function renderActivityCanvas(){
  document.getElementById("backExplanation").onclick=renderActivityExplanation;
  document.getElementById("backLesson").onclick=()=>showPage("route");
  document.getElementById("upload").onclick=()=>{ stopDemo(); document.getElementById("imageUpload").click(); };
+ 
+ document.getElementById("brushBtn").onclick=()=>{
+  stopDemo();
+  toolMode="brush";
+  document.getElementById("brushBtn").style.background="#efedfc";
+  document.getElementById("brushBtn").style.color="var(--primary)";
+  document.getElementById("eraser").style.background="#f0f1f6";
+  document.getElementById("eraser").style.color="var(--ink)";
+  document.getElementById("bucketBtn").style.background="#f0f1f6";
+  document.getElementById("bucketBtn").style.color="var(--ink)";
+ };
+
  document.getElementById("eraser").onclick=()=>{
   stopDemo();
-  const c=document.getElementById("color");
-  if(c.value==="#ffffff"){c.value="#242638";document.getElementById("eraser").textContent="⌫ Borrador";}
-  else{c.value="#ffffff";document.getElementById("eraser").textContent="✏️ Lápiz";}
+  toolMode="eraser";
+  document.getElementById("eraser").style.background="#efedfc";
+  document.getElementById("eraser").style.color="var(--primary)";
+  document.getElementById("brushBtn").style.background="#f0f1f6";
+  document.getElementById("brushBtn").style.color="var(--ink)";
+  document.getElementById("bucketBtn").style.background="#f0f1f6";
+  document.getElementById("bucketBtn").style.color="var(--ink)";
  };
+
+ document.getElementById("bucketBtn").onclick=()=>{
+  stopDemo();
+  toolMode="bucket";
+  document.getElementById("bucketBtn").style.background="#efedfc";
+  document.getElementById("bucketBtn").style.color="var(--primary)";
+  document.getElementById("brushBtn").style.background="#f0f1f6";
+  document.getElementById("brushBtn").style.color="var(--ink)";
+  document.getElementById("eraser").style.background="#f0f1f6";
+  document.getElementById("eraser").style.color="var(--ink)";
+ };
+
  document.getElementById("clear").onclick=()=>{
   stopDemo();
   if(confirm("¿Limpiar el lienzo?")){strokes=[];redoStack=[];uploadedImage=null;redraw()}
@@ -495,7 +527,6 @@ function renderActivityCanvas(){
  document.getElementById("undo").onclick=()=>{ stopDemo(); if(strokes.length){redoStack.push(strokes.pop());redraw()} };
  document.getElementById("redo").onclick=()=>{ stopDemo(); if(redoStack.length){strokes.push(redoStack.pop());redraw()} };
 
- // Iniciar animación automáticamente al cargar el lienzo
  requestAnimationFrame(()=>playDemo());
 }
 
@@ -505,7 +536,7 @@ function activityExtra(type){
   directions:"<p><b>Horizontal:</b> — &nbsp; <b>Vertical:</b> | &nbsp; <b>Diagonal:</b> /</p>",
   curves:"<p>Ejemplos: una onda, un arco y una espiral.</p>",
   opacity:"<p>Prueba a cambiar el control de opacidad antes de dibujar cada línea.</p>",
-  points:"<p>Imagina varios puntos repartidos por el lienzo. Intenta conectarlos con cuidado.</p>",
+  path:"<p><b>¡Atención!</b> En esta actividad verás los puntos guía directamente en el lienzo. Sigue la animación para saber en qué orden conectarlos.</p>",
   combine:"<p>Una figura puede mezclar segmentos rectos y curvas.</p>",
   review:"<p>Recuerda: trazos rectos, curvas, formas geométricas y control de intensidad.</p>",
   finalWork:"<p>Esta es tu evaluación práctica final. No tienes que copiar un ejemplo: queremos ver cómo aplicas lo aprendido.</p>"
@@ -513,7 +544,7 @@ function activityExtra(type){
  return examples[type]||"";
 }
 
-/* LIENZO Y DETECCIÓN INMEDIATA DE TRAMO */
+/* LIENZO Y DETECCIÓN */
 function initCanvas(){
  canvas=document.getElementById("drawingCanvas");
  ctx=canvas.getContext("2d");
@@ -531,23 +562,40 @@ function initCanvas(){
  };
 
  canvas.onpointerdown=e=>{
-  // Detiene y borra la animación inmediatamente al primer toque o clic del alumno
   stopDemo();
+  const p=getPos(e);
+
+  if(toolMode === "bucket"){
+   floodFill(Math.round(p.x), Math.round(p.y), document.getElementById("color").value);
+   redraw();
+   return;
+  }
+
   drawing=true;
   canvas.setPointerCapture(e.pointerId);
-  const p=getPos(e);
+  
+  let strokeColor = document.getElementById("color").value;
+  let strokeSize = Number(document.getElementById("size").value);
+  let strokeOpacity = Number(document.getElementById("opacity").value)/100;
+
+  if(toolMode === "eraser"){
+   strokeColor = "#ffffff";
+   strokeSize = strokeSize * 2;
+  }
+
   currentStroke={
    points:[p],
-   color:document.getElementById("color").value,
-   size:Number(document.getElementById("size").value),
-   opacity:Number(document.getElementById("opacity").value)/100
+   color:strokeColor,
+   size:strokeSize,
+   opacity:strokeOpacity
   };
   redoStack=[];
   strokes.push(currentStroke);
   redraw();
  };
+
  canvas.onpointermove=e=>{
-  if(!drawing||!currentStroke)return;
+  if(!drawing||!currentStroke || toolMode==="bucket")return;
   currentStroke.points.push(getPos(e));
   redraw();
  };
@@ -559,6 +607,64 @@ function initCanvas(){
  document.getElementById("opacity").oninput=e=>{ document.getElementById("opacityValue").textContent=e.target.value+"%"; };
 }
 
+/* ALGORITMO DE RELLENO (FLOOD FILL) BÁSICO */
+function floodFill(startX, startY, fillColorHex) {
+ const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+ const data = imgData.data;
+ const width = canvas.width;
+ const height = canvas.height;
+
+ if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
+
+ const targetIdx = (startY * width + startX) * 4;
+ const targetR = data[targetIdx];
+ const targetG = data[targetIdx + 1];
+ const targetB = data[targetIdx + 2];
+ const targetA = data[targetIdx + 3];
+
+ // Convertir hex fill a RGB
+ const rHex = parseInt(fillColorHex.slice(1, 3), 16);
+ const gHex = parseInt(fillColorHex.slice(3, 5), 16);
+ const bHex = parseInt(fillColorHex.slice(5, 7), 16);
+
+ if (targetR === rHex && targetG === gHex && targetB === bHex) return;
+
+ const queue = [[startX, startY]];
+ const visited = new Uint8Array(width * height);
+
+ while (queue.length > 0) {
+  const [x, y] = queue.pop();
+  const idx = y * width + x;
+  
+  if (x < 0 || x >= width || y < 0 || y >= height) continue;
+  if (visited[idx]) continue;
+
+  const pixelIdx = idx * 4;
+  const r = data[pixelIdx];
+  const g = data[pixelIdx + 1];
+  const b = data[pixelIdx + 2];
+  const a = data[pixelIdx + 3];
+
+  // Comprobar similitud con el color original (tolerancia baja)
+  if (Math.abs(r - targetR) < 30 && Math.abs(g - targetG) < 30 && Math.abs(b - targetB) < 30) {
+   data[pixelIdx] = rHex;
+   data[pixelIdx + 1] = gHex;
+   data[pixelIdx + 2] = bHex;
+   data[pixelIdx + 3] = 255;
+
+   visited[idx] = 1;
+
+   queue.push([x + 1, y]);
+   queue.push([x - 1, y]);
+   queue.push([x, y + 1]);
+   queue.push([x, y - 1]);
+  }
+ }
+
+ ctx.putImageData(imgData, 0, 0);
+ // Guardar trazo de relleno en el historial guardando una captura visual si fuera necesario, o dejando los trazos
+}
+
 function redraw(){
  if(!canvas||!ctx)return;
  ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -568,7 +674,48 @@ function redraw(){
   try{ctx.drawImage(uploadedImage,0,0,canvas.width,canvas.height)}catch(e){}
  }
  for(const s of strokes)drawStroke(s);
+
+ // Si es la actividad de conectar puntos (path), dibujamos los puntos guía en el lienzo principal
+ const type = activities[currentLesson][currentActivity][3];
+ if(type === "path") {
+  drawGuidePoints(ctx);
+ }
 }
+
+function drawGuidePoints(targetCtx) {
+ const pts = demos.path.paths;
+ targetCtx.save();
+ targetCtx.fillStyle = "#7057df";
+ targetCtx.strokeStyle = "#ffffff";
+ targetCtx.lineWidth = 3;
+ 
+ // Extraer puntos únicos de la ruta de demostración
+ const uniquePoints = [];
+ pts.forEach(p => {
+  p.forEach(coord => {
+   if(!uniquePoints.some(up => up[0]===coord[0] && up[1]===coord[1])) {
+    uniquePoints.push(coord);
+   }
+  });
+ });
+
+ uniquePoints.forEach((p, idx) => {
+  const px = p[0] * canvas.width;
+  const py = p[1] * canvas.height;
+  targetCtx.beginPath();
+  targetCtx.arc(px, py, 8, 0, Math.PI * 2);
+  targetCtx.fill();
+  targetCtx.stroke();
+
+  // Numerar los puntos para saber el orden
+  targetCtx.fillStyle = "#242638";
+  targetCtx.font = "bold 14px sans-serif";
+  targetCtx.fillText(idx + 1, px + 12, py + 5);
+  targetCtx.fillStyle = "#7057df";
+ });
+ targetCtx.restore();
+}
+
 function drawStroke(s){
  if(!s.points||!s.points.length)return;
  ctx.save();
@@ -605,7 +752,7 @@ document.getElementById("imageUpload").addEventListener("change",e=>{
  e.target.value="";
 });
 
-/* MOTOR DE DEMOSTRACIÓN EN BUCLE AUTOMÁTICO */
+/* MOTOR DE DEMOSTRACIÓN */
 function clearDemoCanvas(){
  if(!demoCanvas||!demoCtx)return;
  demoCtx.clearRect(0,0,demoCanvas.width,demoCanvas.height);
@@ -700,7 +847,14 @@ function renderDemo(completed,currentPath,currentT){
  for(const p of completed)drawDemoPath(p,1);
  if(currentPath)drawDemoPath(currentPath,currentT);
  demoCtx.restore();
+
+ // Si es la actividad de puntos, renderizar los puntos también en el canvas de demo para mantener visibilidad
+ const type = activities[currentLesson][currentActivity][3];
+ if(type === "path") {
+  drawGuidePoints(demoCtx);
+ }
 }
+
 function playDemo(){
  stopDemo();
 
@@ -823,7 +977,7 @@ function checkActivity(){
   case "intensity": case "fiveLevels": pass=m.total>=3; msg="Varía la opacidad de tus trazos."; break;
   case "sphere": case "shading": pass=m.total>=5; msg="Dibuja el objeto con varios trazos y tonos."; break;
   case "circles": pass=m.total>=3; msg="Intenta dibujar tres círculos."; break;
-  case "path": case "route": pass=m.total>=1; msg="Realiza un trazo continuo."; break;
+  case "path": case "route": pass=m.total>=1; msg="Conecta los puntos guía que aparecen en el lienzo."; break;
   case "threeCombined": case "objects": case "rocket": pass=m.total>=5; msg="Combina más trazos para tus formas."; break;
   default: pass=m.total>=2; msg="Prueba a añadir algunos trazos más.";
  }
