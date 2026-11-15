@@ -377,6 +377,7 @@ let demoCanvas = null;
 let demoCtx = null;
 let uploadedImage = null;
 let demoFrame = null;
+let demoLoopTimer = null;
 let demoPlaying = false;
 let demoIdle = false;
 
@@ -546,7 +547,7 @@ function renderSettings(){
   <div class="setting-row"><div><b>Cerrar sesión</b><div class="muted small">Sal de tu perfil en este navegador.</div></div><button class="btn secondary" id="logout">Cerrar sesión</button></div>
   <div class="setting-row"><div><b>Eliminar cuenta</b><div class="muted small">Elimina tu perfil local y todos sus datos de DRAWO en este navegador.</div></div><button class="btn danger" id="deleteAccount">Eliminar</button></div>
   <hr>
-  <p class="muted small">DRAWO Beta 4.0 · Versión local de prueba. No hay sincronización en la nube.</p>
+  <p class="muted small">DRAWO Beta 3.0 · Versión local de prueba. No hay sincronización en la nube.</p>
  </section>`;
  document.getElementById("resetProgress").onclick=()=>{
   if(!confirm("¿Seguro que quieres reiniciar todas tus lecciones y tu experiencia? Tu nombre de perfil se conservará."))return;
@@ -604,7 +605,7 @@ function renderActivityExplanation(){
  document.getElementById("backRoute").onclick=()=>showPage("route");
 }
 
-/* SEGUNDA PANTALLA: LIENZO Y DEMOSTRACIÓN */
+/* SEGUNDA PANTALLA: LIENZO Y DEMOSTRACIÓN AUTOMÁTICA EN BUCLE */
 function renderActivityCanvas(){
  stopDemo();
  const a=activities[currentLesson][currentActivity];
@@ -676,8 +677,8 @@ function renderActivityCanvas(){
   if(redoStack.length){strokes.push(redoStack.pop());redraw()}
  };
 
- // La demostración empieza automáticamente al entrar en el lienzo.
- playDemo();
+ // Inicia la demostración automáticamente en cuanto el lienzo esté pintado en pantalla.
+ requestAnimationFrame(()=>playDemo());
 }
 
 function activityExtra(type){
@@ -712,7 +713,7 @@ function initCanvas(){
  };
 
  canvas.onpointerdown=e=>{
-  // El primer toque detiene y oculta la demostración inmediatamente sin borrar los trazos del usuario.
+  // El primer toque detiene y oculta la demostración inmediatamente sin tocar los trazos del alumno.
   stopDemo();
   drawing=true;
   canvas.setPointerCapture(e.pointerId);
@@ -798,7 +799,7 @@ document.getElementById("imageUpload").addEventListener("change",e=>{
  e.target.value="";
 });
 
-/* SISTEMA DE ANIMACIÓN DE TRAZO */
+/* SISTEMA DE ANIMACIÓN DE TRAZO EN BUCLE AUTOMÁTICO */
 function clearDemoCanvas(){
  if(!demoCanvas||!demoCtx)return;
  demoCtx.clearRect(0,0,demoCanvas.width,demoCanvas.height);
@@ -816,6 +817,7 @@ function moveTrazo(x,y,idle=false){
  if(!el||!demoCanvas)return;
  const wrap=demoCanvas.parentElement.getBoundingClientRect();
  const rect=demoCanvas.getBoundingClientRect();
+ if(!rect.width||!rect.height)return;
 
  el.classList.remove("hidden");
  el.classList.toggle("idle",idle);
@@ -827,6 +829,10 @@ function stopDemo(){
  if(demoFrame!==null){
   cancelAnimationFrame(demoFrame);
   demoFrame=null;
+ }
+ if(demoLoopTimer!==null){
+  clearTimeout(demoLoopTimer);
+  demoLoopTimer=null;
  }
  demoPlaying=false;
  clearDemoCanvas();
@@ -928,14 +934,25 @@ function playDemo(){
  let currentT=0;
  const duration=650;
  const pauseDuration=420;
+ const loopRestartDelay=1100;
  let currentPath=demo.paths[0];
 
- function finishDemo(){
+ function scheduleLoopRestart(){
   if(!demoPlaying)return;
-  demoPlaying=false;
   demoFrame=null;
-  clearDemoCanvas();
-  moveTrazo(demoCanvas.width*.88,demoCanvas.height*.91,true);
+  // Breve pausa mostrando el ejemplo completo antes de repetir en bucle.
+  demoLoopTimer=setTimeout(()=>{
+   if(!demoPlaying)return;
+   demoLoopTimer=null;
+   completed.length=0;
+   index=0;
+   currentPath=demo.paths[0];
+   phase="drawing";
+   phaseStart=performance.now();
+   currentT=0;
+   clearDemoCanvas();
+   demoFrame=requestAnimationFrame(frame);
+  },loopRestartDelay);
  }
 
  function frame(now){
@@ -962,7 +979,7 @@ function playDemo(){
     if(demo.separate)completed.length=0;
     index++;
     if(index>=demo.paths.length){
-     finishDemo();
+     scheduleLoopRestart();
      return;
     }
     currentPath=demo.paths[index];
@@ -1052,12 +1069,12 @@ function checkActivity(){
    break;
   case "intensity":
   case "fiveLevels":
-   pass=m.total>=3&&new Set(opacities.map(v=>Math.round(v*10))).size>=2;
+   pass=m.total>=3&&new Set(m.opacities.map(v=>Math.round(v*10))).size>=2;
    msg="Cambia la opacidad entre tus trazos para crear intensidades distintas.";
    break;
   case "sphere":
   case "shading":
-   pass=m.total>=5&&new Set(opacities.map(v=>Math.round(v*10))).size>=2;
+   pass=m.total>=5&&new Set(m.opacities.map(v=>Math.round(v*10))).size>=2;
    msg="Prueba con más trazos y diferentes niveles de opacidad.";
    break;
   case "circles":
@@ -1077,7 +1094,7 @@ function checkActivity(){
    break;
   case "warmup":
    pass=m.total>=4;
-   msg="Realiza los四个 trazos del calentamiento.";
+   msg="Realiza los cuatro trazos del calentamiento.";
    break;
   case "finalCreate":
   case "finalWork":
