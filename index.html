@@ -51,6 +51,12 @@ p{line-height:1.55}
 .activity-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .activity-number{color:var(--primary);font-weight:850}
 
+.canvas-layout{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.canvas-container-main{flex:1;min-width:300px}
+.layers-panel{width:240px;background:#f9f9fc;border:1px solid var(--line);border-radius:14px;padding:14px}
+.layer-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:white;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;font-size:13px;cursor:pointer}
+.layer-item.active{border-color:var(--primary);background:#efedfc;font-weight:700}
+
 .canvas-wrap{
  background:#fff;border:2px solid var(--line);border-radius:16px;
  overflow:hidden;touch-action:none;position:relative;
@@ -85,7 +91,6 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/3;touch-action:none;c
 .bottomnav button.active{background:#efedfc;color:var(--primary)}
 input[type=text]{width:100%;padding:13px;border:1px solid var(--line);border-radius:11px;outline-color:var(--primary)}
 hr{border:0;border-top:1px solid var(--line);margin:18px 0}
-.notice{background:#fff8e5;padding:13px 15px;border-radius:12px;color:#765c19;font-size:13px;line-height:1.5}
 .setting-row{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:14px 0;border-bottom:1px solid var(--line)}
 .setting-row:last-child{border:0}
 </style>
@@ -102,6 +107,7 @@ hr{border:0;border-top:1px solid var(--line);margin:18px 0}
 <nav class="bottomnav hidden" id="nav">
   <button data-page="home" class="active">⌂ Inicio</button>
   <button data-page="route">▤ Recorrido</button>
+  <button data-page="freeCanvas">✍️ Lienzo Libre</button>
   <button data-page="profile">◉ Perfil</button>
   <button data-page="settings">⚙ Ajustes</button>
 </nav>
@@ -143,7 +149,7 @@ const activities = [
  [
   ["Aprende","Las líneas curvas","A diferencia de las rectas, las curvas cambian de dirección suavemente. Pueden formar ondas, arcos y espirales.","curves"],
   ["Practica","Dibuja curvas","Dibuja al menos cinco líneas curvas.","fiveCurves"],
-  ["Experimenta","Ondas, arcos y espirales","Prueba دو ondas, dos arcos y dos espirales.","curveTypes"],
+  ["Experimenta","Ondas, arcos y espirales","Prueba dos ondas, dos arcos y dos espirales.","curveTypes"],
   ["Crea","Un océano de líneas","Imagina un océano y represéntalo con ondas, curvas y algunos detalles.","ocean"],
   ["Finaliza","Composición de curvas","Haz un dibujo que combine al menos tres tipos de líneas curvas.","curveVariety"]
  ],
@@ -221,8 +227,6 @@ let currentLesson = 0;
 let currentActivity = 0;
 let drawing = false;
 let toolMode = "brush";
-let strokes = [];
-let redoStack = [];
 let currentStroke = null;
 let canvas = null;
 let ctx = null;
@@ -232,6 +236,12 @@ let uploadedImage = null;
 let demoFrame = null;
 let demoLoopTimer = null;
 let demoPlaying = false;
+
+// Sistema de Capas
+let layers = [
+ { id: 1, name: "Capa 1", visible: true, strokes: [], redoStack: [] }
+];
+let activeLayerId = 1;
 
 function loadData(){
  try {
@@ -301,6 +311,7 @@ function showPage(p){
  nav.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.page===p));
  if(p==="home")renderHome();
  if(p==="route")renderRoute();
+ if(p==="freeCanvas")renderFreeCanvas();
  if(p==="profile")renderProfile();
  if(p==="settings")renderSettings();
 }
@@ -395,14 +406,21 @@ function renderSettings(){
   nav.classList.add("hidden");showWelcome();
  };
 }
+
 function startLesson(i){
  if(i>0&&!data.completed.includes(i-1)&&!data.completed.includes(i)){
   alert("Primero tienes que completar la lección anterior.");return;
  }
  currentLesson=i;
  currentActivity=0;
- strokes=[];redoStack=[];uploadedImage=null;
+ resetLayers();
  renderActivityExplanation();
+}
+
+function resetLayers(){
+ layers = [{ id: 1, name: "Capa 1", visible: true, strokes: [], redoStack: [] }];
+ activeLayerId = 1;
+ uploadedImage = null;
 }
 
 function renderActivityExplanation(){
@@ -431,6 +449,50 @@ function renderActivityExplanation(){
  document.getElementById("activityExtra").innerHTML=activityExtra(a[3]);
  document.getElementById("goToCanvas").onclick=renderActivityCanvas;
  document.getElementById("backRoute").onclick=()=>showPage("route");
+}
+
+/* ZONA DE DIBUJO LIBRE */
+function renderFreeCanvas(){
+ stopDemo();
+ resetLayers();
+ app.innerHTML=`
+ <section class="panel">
+  <div class="activity-head">
+   <div><span class="tag">Espacio abierto</span>
+   <h1 style="margin-top:10px">Lienzo Libre</h1></div>
+  </div>
+  <p class="muted">Experimenta con los pinceles, el relleno, las capas y crea lo que quieras sin límites.</p>
+ </section>
+ <section class="panel">
+  <div class="activity-head"><h2>Tu estudio</h2><span class="muted small">Libre expresión</span></div>
+  <div class="tools">
+   <label class="tool">Color <input type="color" id="color" value="#242638"></label>
+   <label class="tool">Tamaño <input type="range" id="size" min="1" max="30" value="5"><span id="sizeValue">5</span></label>
+   <label class="tool">Opacidad <input type="range" id="opacity" min="10" max="100" value="100"><span id="opacityValue">100%</span></label>
+   <button class="btn ghost" id="brushBtn" style="background:#efedfc;color:var(--primary)">✏️ Pincel</button>
+   <button class="btn ghost" id="eraser">⌫ Borrador</button>
+   <button class="btn ghost" id="bucketBtn">🪣 Relleno</button>
+   <button class="btn ghost" id="undo">↶</button>
+   <button class="btn ghost" id="redo">↷</button>
+   <button class="btn ghost" id="clear">Limpiar</button>
+   <button class="btn ghost" id="upload">Subir imagen</button>
+  </div>
+  <div class="canvas-layout">
+   <div class="canvas-container-main">
+    <div class="canvas-wrap">
+     <canvas id="drawingCanvas" width="900" height="675"></canvas>
+    </div>
+   </div>
+   <div class="layers-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+     <b>Capas</b>
+     <button class="btn" id="addLayerBtn" style="padding:4px 9px;font-size:12px">+ Nueva</button>
+    </div>
+    <div id="layersList"></div>
+   </div>
+  </div>
+ </section>`;
+ initCanvasCommon();
 }
 
 function renderActivityCanvas(){
@@ -463,12 +525,23 @@ function renderActivityCanvas(){
    <button class="btn ghost" id="clear">Limpiar</button>
    <button class="btn ghost" id="upload">Subir dibujo</button>
   </div>
-  <div class="canvas-wrap">
-   <canvas id="drawingCanvas" width="900" height="675"></canvas>
-   <canvas id="demoCanvas" width="900" height="675"></canvas>
-   <div id="trazoDemo" class="trazo-demo hidden" aria-hidden="true">✏️</div>
+  <div class="canvas-layout">
+   <div class="canvas-container-main">
+    <div class="canvas-wrap">
+     <canvas id="drawingCanvas" width="900" height="675"></canvas>
+     <canvas id="demoCanvas" width="900" height="675"></canvas>
+     <div id="trazoDemo" class="trazo-demo hidden" aria-hidden="true">✏️</div>
+    </div>
+   </div>
+   <div class="layers-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+     <b>Capas</b>
+     <button class="btn" id="addLayerBtn" style="padding:4px 9px;font-size:12px">+ Nueva</button>
+    </div>
+    <div id="layersList"></div>
+   </div>
   </div>
-  <div class="btnrow">
+  <div class="btnrow" style="margin-top:18px">
    <button class="btn secondary" id="demo">▶ Repetir demostración</button>
    <button class="btn" id="check">Comprobar actividad</button>
   </div>
@@ -478,53 +551,16 @@ function renderActivityCanvas(){
   <button class="btn ghost" id="backExplanation">← Volver a la explicación</button>
   <button class="btn ghost" id="backLesson">Volver al recorrido</button>
  </div>`;
- initCanvas();
+ initCanvasCommon();
 
- document.getElementById("demo").onclick=playDemo;
- document.getElementById("check").onclick=checkActivity;
- document.getElementById("backExplanation").onclick=renderActivityExplanation;
- document.getElementById("backLesson").onclick=()=>showPage("route");
- document.getElementById("upload").onclick=()=>{ stopDemo(); document.getElementById("imageUpload").click(); };
- 
- document.getElementById("brushBtn").onclick=()=>{
-  stopDemo();
-  toolMode="brush";
-  document.getElementById("brushBtn").style.background="#efedfc";
-  document.getElementById("brushBtn").style.color="var(--primary)";
-  document.getElementById("eraser").style.background="#f0f1f6";
-  document.getElementById("eraser").style.color="var(--ink)";
-  document.getElementById("bucketBtn").style.background="#f0f1f6";
-  document.getElementById("bucketBtn").style.color="var(--ink)";
- };
-
- document.getElementById("eraser").onclick=()=>{
-  stopDemo();
-  toolMode="eraser";
-  document.getElementById("eraser").style.background="#efedfc";
-  document.getElementById("eraser").style.color="var(--primary)";
-  document.getElementById("brushBtn").style.background="#f0f1f6";
-  document.getElementById("brushBtn").style.color="var(--ink)";
-  document.getElementById("bucketBtn").style.background="#f0f1f6";
-  document.getElementById("bucketBtn").style.color="var(--ink)";
- };
-
- document.getElementById("bucketBtn").onclick=()=>{
-  stopDemo();
-  toolMode="bucket";
-  document.getElementById("bucketBtn").style.background="#efedfc";
-  document.getElementById("bucketBtn").style.color="var(--primary)";
-  document.getElementById("brushBtn").style.background="#f0f1f6";
-  document.getElementById("brushBtn").style.color="var(--ink)";
-  document.getElementById("eraser").style.background="#f0f1f6";
-  document.getElementById("eraser").style.color="var(--ink)";
- };
-
- document.getElementById("clear").onclick=()=>{
-  stopDemo();
-  if(confirm("¿Limpiar el lienzo?")){strokes=[];redoStack=[];uploadedImage=null;redraw()}
- };
- document.getElementById("undo").onclick=()=>{ stopDemo(); if(strokes.length){redoStack.push(strokes.pop());redraw()} };
- document.getElementById("redo").onclick=()=>{ stopDemo(); if(redoStack.length){strokes.push(redoStack.pop());redraw()} };
+ const demoBtn = document.getElementById("demo");
+ if(demoBtn) demoBtn.onclick=playDemo;
+ const checkBtn = document.getElementById("check");
+ if(checkBtn) checkBtn.onclick=checkActivity;
+ const backExp = document.getElementById("backExplanation");
+ if(backExp) backExp.onclick=renderActivityExplanation;
+ const backLes = document.getElementById("backLesson");
+ if(backLes) backLes.onclick=()=>showPage("route");
 
  requestAnimationFrame(()=>playDemo());
 }
@@ -535,11 +571,7 @@ function activityExtra(type){
   directions:"<p><b>Horizontal:</b> — &nbsp; <b>Vertical:</b> | &nbsp; <b>Diagonal:</b> /</p>",
   curves:"<p>Ejemplos: una onda, un arco y una espiral.</p>",
   opacity:"<p>Prueba a cambiar el control de opacidad antes de dibujar cada línea.</p>",
-  points:"<p><b>¡Atención!</b> Observa los puntos y guías que aparecen en el lienzo para realizar este ejercicio de precisión.</p>",
   path:"<p><b>¡Atención!</b> Conecta los puntos guía que ves en el lienzo siguiendo el orden indicado.</p>",
-  circles:"<p><b>¡Atención!</b> Utiliza los puntos guía en pantalla para trazar tus círculos.</p>",
-  guided:"<p><b>¡Atención!</b> Sigue las referencias y puntos guía del lienzo para construir la figura.</p>",
-  route:"<p><b>¡Atención!</b> Completa este recorrido utilizando los puntos de apoyo visual.</p>",
   combine:"<p>Una figura puede mezclar segmentos rectos y curvas.</p>",
   review:"<p>Recuerda: trazos rectos, curvas, formas geométricas y control de intensidad.</p>",
   finalWork:"<p>Esta es tu evaluación práctica final. No tienes que copiar un ejemplo: queremos ver cómo aplicas lo aprendido.</p>"
@@ -547,13 +579,15 @@ function activityExtra(type){
  return examples[type]||"";
 }
 
-function initCanvas(){
+function initCanvasCommon(){
  canvas=document.getElementById("drawingCanvas");
- ctx=canvas.getContext("2d");
+ ctx=canvas.getContext("2d", { willReadFrequently: true });
  demoCanvas=document.getElementById("demoCanvas");
- demoCtx=demoCanvas.getContext("2d");
+ demoCtx=demoCanvas ? demoCanvas.getContext("2d", { willReadFrequently: true }) : null;
+ 
+ renderLayersUI();
  redraw();
- clearDemoCanvas();
+ if(demoCanvas) clearDemoCanvas();
 
  const getPos=e=>{
   const r=canvas.getBoundingClientRect();
@@ -566,9 +600,11 @@ function initCanvas(){
  canvas.onpointerdown=e=>{
   stopDemo();
   const p=getPos(e);
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  if(!activeLayer || !activeLayer.visible) return;
 
   if(toolMode === "bucket"){
-   floodFill(Math.round(p.x), Math.round(p.y), document.getElementById("color").value);
+   floodFillLayer(activeLayer, Math.round(p.x), Math.round(p.y), document.getElementById("color").value);
    redraw();
    return;
   }
@@ -591,8 +627,8 @@ function initCanvas(){
    size:strokeSize,
    opacity:strokeOpacity
   };
-  redoStack=[];
-  strokes.push(currentStroke);
+  activeLayer.redoStack=[];
+  activeLayer.strokes.push(currentStroke);
   redraw();
  };
 
@@ -605,17 +641,138 @@ function initCanvas(){
  canvas.onpointerup=end;
  canvas.onpointercancel=end;
 
+ document.getElementById("upload").onclick=()=>{ stopDemo(); document.getElementById("imageUpload").click(); };
+ 
+ document.getElementById("brushBtn").onclick=()=>{
+  stopDemo(); toolMode="brush";
+  setActiveToolBtn("brushBtn");
+ };
+ document.getElementById("eraser").onclick=()=>{
+  stopDemo(); toolMode="eraser";
+  setActiveToolBtn("eraser");
+ };
+ document.getElementById("bucketBtn").onclick=()=>{
+  stopDemo(); toolMode="bucket";
+  setActiveToolBtn("bucketBtn");
+ };
+
+ document.getElementById("clear").onclick=()=>{
+  stopDemo();
+  if(confirm("¿Limpiar la capa actual?")){
+   const activeLayer = layers.find(l => l.id === activeLayerId);
+   if(activeLayer){ activeLayer.strokes=[]; activeLayer.redoStack=[]; }
+   uploadedImage=null;
+   redraw();
+  }
+ };
+ document.getElementById("undo").onclick=()=>{
+  stopDemo();
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  if(activeLayer && activeLayer.strokes.length){
+   activeLayer.redoStack.push(activeLayer.strokes.pop());
+   redraw();
+  }
+ };
+ document.getElementById("redo").onclick=()=>{
+  stopDemo();
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  if(activeLayer && activeLayer.redoStack.length){
+   activeLayer.strokes.push(activeLayer.redoStack.pop());
+   redraw();
+  }
+ };
+
+ document.getElementById("addLayerBtn").onclick=()=>{
+  const newId = layers.length ? Math.max(...layers.map(l=>l.id))+1 : 1;
+  layers.push({ id: newId, name: `Capa ${newId}`, visible: true, strokes: [], redoStack: [] });
+  activeLayerId = newId;
+  renderLayersUI();
+  redraw();
+ };
+
  const sizeInput = document.getElementById("size");
  const opacityInput = document.getElementById("opacity");
  if(sizeInput) sizeInput.oninput=e=>{ const v=document.getElementById("sizeValue"); if(v) v.textContent=e.target.value; };
  if(opacityInput) opacityInput.oninput=e=>{ const v=document.getElementById("opacityValue"); if(v) v.textContent=e.target.value+"%"; };
 }
 
-function floodFill(startX, startY, fillColorHex) {
- const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+function setActiveToolBtn(id){
+ ["brushBtn","eraser","bucketBtn"].forEach(btnId=>{
+  const el = document.getElementById(btnId);
+  if(!el) return;
+  if(btnId === id){
+   el.style.background="#efedfc";
+   el.style.color="var(--primary)";
+  }else{
+   el.style.background="#f0f1f6";
+   el.style.color="var(--ink)";
+  }
+ });
+}
+
+function renderLayersUI(){
+ const list = document.getElementById("layersList");
+ if(!list) return;
+ list.innerHTML = "";
+ layers.slice().reverse().forEach(l => {
+  const item = document.createElement("div");
+  item.className = `layer-item ${l.id === activeLayerId ? "active" : ""}`;
+  item.innerHTML = `
+   <div style="display:flex;align-items:center;gap:6px;overflow:hidden">
+    <input type="checkbox" ${l.visible?"checked":""} title="Mostrar/Ocultar" data-act="toggle" data-id="${l.id}">
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(l.name)}</span>
+   </div>
+   <div style="display:flex;gap:4px">
+    ${layers.length > 1 ? `<button class="btn danger" style="padding:2px 6px;font-size:11px" data-act="del" data-id="${l.id}">✕</button>` : ""}
+   </div>`;
+  
+  item.onclick = (e) => {
+   if(e.target.tagName === "INPUT") return;
+   if(e.target.dataset.act === "del"){
+    e.stopPropagation();
+    layers = layers.filter(layer => layer.id !== Number(e.target.dataset.id));
+    if(!layers.some(layer => layer.id === activeLayerId)){
+     activeLayerId = layers[layers.length - 1].id;
+    }
+    renderLayersUI();
+    redraw();
+    return;
+   }
+   activeLayerId = l.id;
+   renderLayersUI();
+  };
+
+  const checkbox = item.querySelector("input[type=checkbox]");
+  checkbox.onchange = (e) => {
+   l.visible = e.target.checked;
+   redraw();
+  };
+
+  list.appendChild(item);
+ });
+}
+
+/* SISTEMA DE RELLENO (FLOOD FILL) MEJORADO PARA CAPAS Y TRAZOS */
+function floodFillLayer(layer, startX, startY, fillColorHex) {
+ // Renderizamos temporalmente el canvas completo en memoria con todas las capas visibles
+ const tempCanvas = document.createElement('canvas');
+ tempCanvas.width = canvas.width;
+ tempCanvas.height = canvas.height;
+ const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+ tempCtx.fillStyle = "#ffffff";
+ tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+ if(uploadedImage) tempCtx.drawImage(uploadedImage, 0, 0, tempCanvas.width, tempCanvas.height);
+ 
+ layers.forEach(l => {
+  if(l.visible) {
+   l.strokes.forEach(s => drawSpecificStroke(tempCtx, s));
+  }
+ });
+
+ const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
  const data = imgData.data;
- const width = canvas.width;
- const height = canvas.height;
+ const width = tempCanvas.width;
+ const height = tempCanvas.height;
 
  if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
 
@@ -632,6 +789,7 @@ function floodFill(startX, startY, fillColorHex) {
 
  const queue = [[startX, startY]];
  const visited = new Uint8Array(width * height);
+ const filledPoints = [];
 
  while (queue.length > 0) {
   const [x, y] = queue.pop();
@@ -645,13 +803,10 @@ function floodFill(startX, startY, fillColorHex) {
   const g = data[pixelIdx + 1];
   const b = data[pixelIdx + 2];
 
-  if (Math.abs(r - targetR) < 30 && Math.abs(g - targetG) < 30 && Math.abs(b - targetB) < 30) {
-   data[pixelIdx] = rHex;
-   data[pixelIdx + 1] = gHex;
-   data[pixelIdx + 2] = bHex;
-   data[pixelIdx + 3] = 255;
-
+  // Tolerancia para bordes suaves (antialiasing)
+  if (Math.abs(r - targetR) < 35 && Math.abs(g - targetG) < 35 && Math.abs(b - targetB) < 35) {
    visited[idx] = 1;
+   filledPoints.push({x, y});
 
    queue.push([x + 1, y]);
    queue.push([x - 1, y]);
@@ -660,7 +815,15 @@ function floodFill(startX, startY, fillColorHex) {
   }
  }
 
- ctx.putImageData(imgData, 0, 0);
+ if(filledPoints.length > 0){
+  // Guardamos el relleno como un trazo de puntos en la capa activa
+  layer.strokes.push({
+   isFill: true,
+   points: filledPoints,
+   color: fillColorHex,
+   opacity: 1
+  });
+ }
 }
 
 function redraw(){
@@ -668,18 +831,54 @@ function redraw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
  ctx.fillStyle="#ffffff";
  ctx.fillRect(0,0,canvas.width,canvas.height);
+ 
  if(uploadedImage){
   try{ctx.drawImage(uploadedImage,0,0,canvas.width,canvas.height)}catch(e){}
  }
- for(const s of strokes)drawStroke(s);
 
- // Si estamos en la Lección 5 (currentLesson === 4), dibujamos puntos guía en TODAS sus actividades
- if(currentLesson === 4) {
+ // Dibujar todas las capas visibles en orden
+ layers.forEach(l => {
+  if(l.visible){
+   l.strokes.forEach(s => drawSpecificStroke(ctx, s));
+  }
+ });
+
+ if(page !== "freeCanvas" && currentLesson === 4) {
   const type = activities[currentLesson][currentActivity][3];
   if(demos[type] && demos[type].paths) {
    drawGuidePoints(ctx, demos[type].paths);
   }
  }
+}
+
+function drawSpecificStroke(targetCtx, s){
+ if(!s.points||!s.points.length)return;
+ targetCtx.save();
+ targetCtx.globalAlpha=s.opacity??1;
+ 
+ if(s.isFill){
+  targetCtx.fillStyle=s.color||"#222";
+  s.points.forEach(p => {
+   targetCtx.fillRect(p.x, p.y, 1.5, 1.5);
+  });
+ } else {
+  targetCtx.strokeStyle=s.color||"#222";
+  targetCtx.fillStyle=s.color||"#222";
+  targetCtx.lineWidth=s.size||5;
+  targetCtx.lineCap="round";
+  targetCtx.lineJoin="round";
+  if(s.points.length===1){
+   targetCtx.beginPath();
+   targetCtx.arc(s.points[0].x,s.points[0].y,(s.size||5)/2,0,Math.PI*2);
+   targetCtx.fill();
+  }else{
+   targetCtx.beginPath();
+   targetCtx.moveTo(s.points[0].x,s.points[0].y);
+   for(let i=1;i<s.points.length;i++)targetCtx.lineTo(s.points[i].x,s.points[i].y);
+   targetCtx.stroke();
+  }
+ }
+ targetCtx.restore();
 }
 
 function drawGuidePoints(targetCtx, paths) {
@@ -713,28 +912,6 @@ function drawGuidePoints(targetCtx, paths) {
  targetCtx.restore();
 }
 
-function drawStroke(s){
- if(!s.points||!s.points.length)return;
- ctx.save();
- ctx.globalAlpha=s.opacity??1;
- ctx.strokeStyle=s.color||"#222";
- ctx.fillStyle=s.color||"#222";
- ctx.lineWidth=s.size||5;
- ctx.lineCap="round";
- ctx.lineJoin="round";
- if(s.points.length===1){
-  ctx.beginPath();
-  ctx.arc(s.points[0].x,s.points[0].y,(s.size||5)/2,0,Math.PI*2);
-  ctx.fill();
- }else{
-  ctx.beginPath();
-  ctx.moveTo(s.points[0].x,s.points[0].y);
-  for(let i=1;i<s.points.length;i++)ctx.lineTo(s.points[i].x,s.points[i].y);
-  ctx.stroke();
- }
- ctx.restore();
-}
-
 document.getElementById("imageUpload").addEventListener("change",e=>{
  const file=e.target.files[0];
  if(!file)return;
@@ -742,7 +919,7 @@ document.getElementById("imageUpload").addEventListener("change",e=>{
  const reader=new FileReader();
  reader.onload=()=>{
   const img=new Image();
-  img.onload=()=>{ uploadedImage=img; redraw(); alert("Dibujo cargado en el lienzo."); };
+  img.onload=()=>{ uploadedImage=img; redraw(); alert("Imagen cargada en el lienzo."); };
   img.src=reader.result;
  };
  reader.readAsDataURL(file);
@@ -854,7 +1031,6 @@ function renderDemo(completed,currentPath,currentT){
 
 function playDemo(){
  stopDemo();
-
  const type=activities[currentLesson][currentActivity][3];
  const demo=demos[type];
  const feedback=document.getElementById("feedback");
@@ -935,9 +1111,18 @@ function playDemo(){
  demoFrame=requestAnimationFrame(frame);
 }
 
+function getTotalStrokesCount(){
+ let count = 0;
+ layers.forEach(l => count += l.strokes.length);
+ return count;
+}
+
 function getMetrics(){
- const all=strokes.filter(s=>s.points&&s.points.length);
- const lineStats=all.map(s=>{
+ let total = getTotalStrokesCount();
+ const allStrokes = [];
+ layers.forEach(l => allStrokes.push(...l.strokes));
+ 
+ const lineStats=allStrokes.filter(s=>s.points&&s.points.length && !s.isFill).map(s=>{
   const p=s.points;
   const first=p[0],last=p[p.length-1];
   const dx=last.x-first.x,dy=last.y-first.y;
@@ -946,13 +1131,9 @@ function getMetrics(){
   for(let i=1;i<p.length;i++)path+=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);
   return {dx,dy,length,path,ratio:(length?path/length:1),points:p.length,opacity:s.opacity??1};
  });
- const total=all.length;
  const horizontal=lineStats.filter(s=>Math.abs(s.dy)<Math.abs(s.dx)*.35).length;
- const vertical=lineStats.filter(s=>Math.abs(s.dx)<Math.abs(s.dy)*.35).length;
- const diagonal=lineStats.filter(s=>Math.abs(s.dx)>20&&Math.abs(s.dy)>20&&Math.abs(Math.abs(s.dx)-Math.abs(s.dy))<Math.max(Math.abs(s.dx),Math.abs(s.dy))*.8).length;
  const curved=lineStats.filter(s=>s.ratio>1.18&&s.points>5).length;
- const opacities=lineStats.map(s=>s.opacity);
- return {total,horizontal,vertical,diagonal,curved,opacities,lineStats};
+ return {total,horizontal,curved,lineStats};
 }
 
 function checkActivity(){
@@ -990,7 +1171,7 @@ function checkActivity(){
 function nextActivity(){
  if(currentActivity<4){
   currentActivity++;
-  strokes=[]; redoStack=[]; uploadedImage=null;
+  resetLayers();
   renderActivityExplanation();
  }else{
   if(!data.completed.includes(currentLesson)){
